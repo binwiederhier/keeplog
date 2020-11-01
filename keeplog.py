@@ -1,13 +1,8 @@
+#!/usr/bin/env python3
+
 import gkeepapi
 import re
-from datetime import datetime
 from os.path import expanduser
-
-class Entry:
-    def __init__(self, title, text, date):
-        self.title = title
-        self.text = text
-        self.date = date
 
 def main():
     # read config
@@ -30,26 +25,22 @@ def main():
         print("Invalid config file, need at least 'user=', 'pass=' and 'log='.")
 
     # parse log
+    print("Parsing log ... ", end="", flush=True)
+
     log = {}
     with open(expanduser(file)) as f:
         for line in f:
-            match = re.search('^(\d+)/(\d+)/(\d+) ', line)
-            if match:
+            if re.search('^(\d+)/(\d+)/(\d+) ', line):
                 title = line.strip()
-                date = datetime(year=2000+int(match.group(3)), month=int(match.group(1)), day=int(match.group(2)))
-                log[title] = Entry(title, "", date)
+                log[title] = ""
             elif line.strip() != "--" and title in log:
-                log[title].text = log[title].text + line
+                log[title] = log[title] + line
 
-  #  for k in log:
-  #      print(log[k].title)
-  #      print("--")
-  #      print(log[k].text, end="")
+    print(str(len(log)) + " entries.")
 
-    #exit(1)
+    # read keep (using aap password, see https://myaccount.google.com/apppasswords)
+    print("Reading Keep notes ... ", end="", flush=True)
 
-    # read keep
-    # App password, see https://myaccount.google.com/apppasswords
     keep = gkeepapi.Keep()
     keep.login(username, password)
 
@@ -63,30 +54,28 @@ def main():
             continue
         notes[note.title] = note
 
-   # for title in notes.keys():
-   #     note = notes[title]
-   #     print(note.title)
-   #     print("-- ")
-   #     print(note.text, end="")
+    print(str(len(notes)) + " notes.")
 
-    #exit(1)
+    # update keep
+    print("Updating Keep ... ", end="", flush=True)
+    updated = 0
 
-    for entry in log.values():
-        if not entry.title in notes:
-            print(f"{entry.title} - Creating remotely")
-            note = keep.createNote(entry.title, entry.text)
-            note.timestamps.created = entry.date
-            note.timestamps.edited = entry.date
+    for title in log.keys():
+        text = log[title]
+        if not title in notes:
+            if updated == 0: print()
+            print(f"- Creating: {title}")
+            note = keep.createNote(title, text)
             note.labels.add(label)
-        elif notes[entry.title].text != entry.text:
-            print(f"{entry.title} - Updating remotely")
-            notes[title].text = entry.text
-            notes[title].timestamps.created = entry.date
-            notes[title].timestamps.edited = entry.date
-        else:
-            print(f"{entry.title} - Up to date")
+            updated += 1
+        elif notes[title].text != text:
+            if updated == 0: print()
+            print(f"- Updating: {title}")
+            notes[title].text = text
+            updated += 1
 
     keep.sync()
+    print(str(updated) + " updated.")
 
 if __name__ == '__main__':
     main()
