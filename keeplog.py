@@ -2,53 +2,65 @@
 
 import gkeepapi
 import re
-from datetime import datetime
-from os.path import expanduser, getmtime
+import json
+import hashlib
+from os.path import expanduser, exists
 
 def main():
     # read config
     config = expanduser("~/.config/keeplog.conf")
-    try:
-        with open(config) as cfg:
-            for line in cfg:
-                match = re.search("^([^=]+)=(.+)", line)
-                if match:
-                    if match.group(1) == "user":
-                        username = match.group(2)
-                    elif match.group(1) == "pass":
-                        password = match.group(2)
-                    elif match.group(1) == "file":
-                        file = match.group(2)
-    except:
-        print("Cannot read config file " + config)
+
+    username = None
+    password = None
+    file = None
+    sync_file = None
+    conflict_strategy = None
+
+    with open(config, encoding='utf-8') as cfg:
+        for line in cfg:
+            match = re.search("^([^=]+)=(.+)", line)
+            if match:
+                if match.group(1) == "user":
+                    username = match.group(2)
+                elif match.group(1) == "pass":
+                    password = match.group(2)
+                elif match.group(1) == "file":
+                    file = expanduser(match.group(2))
+                elif match.group(1) == "sync-file":
+                    sync_file = expanduser(match.group(2))
+                elif match.group(1) == "on-conflict":
+                    conflict_strategy = match.group(2)
 
     if not username or not password or not file:
-        print("Invalid config file, need at least 'user=', 'pass=' and 'log='.")
+        raise Exception("Invalid config file, need at least 'user=', 'pass=' and 'file='.")
+
+    if not conflict_strategy:
+        conflict_strategy = "prefer-local"
+
+    if not sync_file:
+        sync_file = file + ".sync"
 
     # parse log
     print("Parsing log ... ", end="", flush=True)
 
-    log = {}
-    log_modified = datetime.utcfromtimestamp(getmtime(expanduser(file)))
-
-    with open(expanduser(file)) as f:
+    local = {}
+    with open(file, encoding='utf-8') as f:
         for line in f:
             if re.search('^(\d+)/(\d+)/(\d+) ', line):
                 title = line.strip()
-                log[title] = ""
-            elif line.strip() != "--" and title in log:
-                log[title] = log[title] + line
+                local[title] = ""
+            elif line.strip() != "--" and title in local:
+                local[title] = local[title] + line
 
-    print(str(len(log)) + " entries.")
+    print(str(len(local)) + " entries.")
 
-    # read keep (using aap password, see https://myaccount.google.com/apppasswords)
+    # read keep
     print("Reading Keep notes ... ", end="", flush=True)
 
     keep = gkeepapi.Keep()
     keep.login(username, password)
 
-    notes = {}
-    notes_modified = None # Keep timestamps are UTC!
+    remote = {}
     label = keep.findLabel('log')
 
     note: gkeepapi.node.TopLevelNode
@@ -56,35 +68,51 @@ def main():
         if not re.search('^\d+/\d+/\d+ ', note.title):
             print(f"{note.title} - Skipping, title mismatch")
             continue
-        notes[note.title] = note
-        if notes_modified is None or note.timestamps.edited > notes_modified:
-            notes_modified = note.timestamps.edited
+        remote[note.title] = note
 
-    print(str(len(notes)) + " notes.")
+    print(str(len(remote)) + " notes.")
 
-    #print("log modified = " + log_modified.ctime())
-    #print("notes modified = " + notes_modified.ctime())
+    # read sync file
+    sync = {}
+    if exists(sync_file):
+        with open(sync_file, encoding='utf-8') as f:
+            data = json.load(f)
+            if not "notes" in data:
+                raise ValueError(f"Invalid sync file format in file {sync_file}")
+            notes = data["notes"]
+            for title in notes.keys():
+                sync[title] = notes[title]
 
     # update keep
     print("Updating Keep ... ", end="", flush=True)
     updated = 0
 
-    for title in log.keys():
-        text = log[title]
-        if not title in notes:
+    for title in local.keys():
+        text = local[title]
+        if not title in remote:
             if updated == 0: print()
             print(f"- Creating: {title}")
             note = keep.createNote(title, text)
             note.labels.add(label)
             updated += 1
-        elif notes[title].text != text:
+        elif remote[title].text != text:
             if updated == 0: print()
             print(f"- Updating: {title}")
-            notes[title].text = text
+            remote[title].text = text
             updated += 1
+        sync[title] = {
+            "checksum": hashlib.md5(text.encode("utf-8")).hexdigest()
+        }
 
     keep.sync()
     print(str(updated) + " updated.")
+
+    # write sync file
+    print("Writing sync file ... ", end="", flush=True)
+    with open(sync_file, mode="w", encoding="utf-8") as f:
+        data = { "notes" : sync }
+        json.dump(data, f)
+    print("Done.")
 
 if __name__ == '__main__':
     main()
