@@ -2,7 +2,8 @@
 
 import gkeepapi
 import re
-from os.path import expanduser
+from datetime import datetime
+from os.path import expanduser, getmtime
 
 def main():
     # read config
@@ -28,6 +29,8 @@ def main():
     print("Parsing log ... ", end="", flush=True)
 
     log = {}
+    log_modified = datetime.utcfromtimestamp(getmtime(expanduser(file)))
+
     with open(expanduser(file)) as f:
         for line in f:
             if re.search('^(\d+)/(\d+)/(\d+) ', line):
@@ -45,6 +48,7 @@ def main():
     keep.login(username, password)
 
     notes = {}
+    notes_modified = None # Keep timestamps are UTC!
     label = keep.findLabel('log')
 
     note: gkeepapi.node.TopLevelNode
@@ -53,8 +57,13 @@ def main():
             print(f"{note.title} - Skipping, title mismatch")
             continue
         notes[note.title] = note
+        if notes_modified is None or note.timestamps.edited > notes_modified:
+            notes_modified = note.timestamps.edited
 
     print(str(len(notes)) + " notes.")
+
+    #print("log modified = " + log_modified.ctime())
+    #print("notes modified = " + notes_modified.ctime())
 
     # update keep
     print("Updating Keep ... ", end="", flush=True)
