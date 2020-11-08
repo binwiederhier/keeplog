@@ -27,7 +27,8 @@ the computer.
 Installation
 --
 1. Create a config file `~/.keeplog/config` from [this template](config).
-2. Run `./keeplog.py`
+2. Install dependencies via `pip3 install -r requirements.txt`
+3. Run `./keeplog.py`
 
 Copyright
 --
