@@ -13,32 +13,6 @@ from pathlib import Path
 
 import gkeepapi
 
-
-def main():
-    logger = setup_logger()
-    config = load_config()
-
-    keeplog = Keeplog(logger, config)
-    keeplog.sync()
-
-
-def md5(s):
-    return hashlib.md5(s.encode("utf-8")).hexdigest()
-
-
-def setup_logger():
-    logger = logging.getLogger('keeplog')
-    logger.setLevel(logging.INFO)
-    handler = logging.StreamHandler(sys.stdout)
-    handler.setFormatter(logging.Formatter('%(asctime)s [%(levelname)s] %(message)s'))
-    logger.addHandler(handler)
-    return logger
-
-
-def load_config():
-    return Config().load(expanduser("~/.keeplog/config"))
-
-
 class Keeplog:
     def __init__(self, logger, config):
         self.logger = logger
@@ -63,7 +37,7 @@ class Keeplog:
                 self.logger.info(f"- Creating remotely: {title}")
                 note = self.keep.createNote(title, local[title]["text"])
                 note.labels.add(label)
-                sync[title] = {"checksum": md5(local[title]["text"])}
+                sync[title] = {"checksum": self.md5(local[title]["text"])}
             elif remote[title]["note"].text != local[title]["text"]:
                 if title in sync:
                     local_changed = local[title]["checksum"] != sync[title]["checksum"]
@@ -71,36 +45,36 @@ class Keeplog:
                     if local_changed and not remote_changed:
                         self.logger.info(f"- Updating remotely: {title}")
                         remote[title]["note"].text = local[title]["text"]
-                        sync[title] = {"checksum": md5(local[title]["text"])}
+                        sync[title] = {"checksum": self.md5(local[title]["text"])}
                     elif not local_changed and remote_changed:
                         self.logger.info(f"- Updating locally: {title}")
                         local[title]["text"] = remote[title]["note"].text
-                        sync[title] = {"checksum": md5(remote[title]["note"].text)}
+                        sync[title] = {"checksum": self.md5(remote[title]["note"].text)}
                         local_updated = True
                     elif self.config.on_conflict == "prefer-remote":
                         self.logger.info(f"- Updating locally (conflict override): {title}")
                         local[title]["text"] = remote[title]["note"].text
-                        sync[title] = {"checksum": md5(remote[title]["note"].text)}
+                        sync[title] = {"checksum": self.md5(remote[title]["note"].text)}
                         local_updated = True
                     elif self.config.on_conflict == "prefer-local":
                         self.logger.info(f"- Updating remotely (conflict override): {title}")
                         remote[title]["note"].text = local[title]["text"]
-                        sync[title] = {"checksum": md5(local[title]["text"])}
+                        sync[title] = {"checksum": self.md5(local[title]["text"])}
                     else:
                         self.logger.info(f"- Conflict, doing nothing: {title}")
                 elif self.config.on_conflict == "prefer-remote":
                     self.logger.info(f"- Updating locally (conflict override): {title}")
                     local[title]["text"] = remote[title]["note"].text
-                    sync[title] = {"checksum": md5(remote[title]["note"].text)}
+                    sync[title] = {"checksum": self.md5(remote[title]["note"].text)}
                     local_updated = True
                 elif self.config.on_conflict == "prefer-local":
                     self.logger.info(f"- Updating remotely (conflict override): {title}")
                     remote[title]["note"].text = local[title]["text"]
-                    sync[title] = {"checksum": md5(local[title]["text"])}
+                    sync[title] = {"checksum": self.md5(local[title]["text"])}
                 else:
                     self.logger.info(f"- Conflict, doing nothing: {title}")
             else:
-                sync[title] = {"checksum": md5(local[title]["text"])}
+                sync[title] = {"checksum": self.md5(local[title]["text"])}
 
         self.keep.sync()
         self.write_state()
@@ -130,7 +104,7 @@ class Keeplog:
         for title in local.keys():
             new_text = re.sub("\n\s*\n$", "\n", local[title]["text"])
             local[title]["text"] = new_text
-            local[title]["checksum"] = md5(new_text)
+            local[title]["checksum"] = self.md5(new_text)
 
         return local
 
@@ -146,7 +120,7 @@ class Keeplog:
                 self.logger.warning(f"{note.title} - Skipping, title mismatch")
                 continue
             remote[note.title] = {
-                "checksum": md5(note.text),
+                "checksum": self.md5(note.text),
                 "note": note
             }
 
@@ -255,6 +229,9 @@ class Keeplog:
     def make_parent(self, file):
         Path(file).parent.mkdir(mode=0o755, parents=True, exist_ok=True)
 
+    def md5(self, s):
+        return hashlib.md5(s.encode("utf-8")).hexdigest()
+
 
 class Config:
     def __init__(self):
@@ -302,5 +279,22 @@ class Config:
         return self
 
 
+def setup_logger():
+    logger = logging.getLogger('keeplog')
+    logger.setLevel(logging.INFO)
+    handler = logging.StreamHandler(sys.stdout)
+    handler.setFormatter(logging.Formatter('%(asctime)s [%(levelname)s] %(message)s'))
+    logger.addHandler(handler)
+    return logger
+
+
+def load_config():
+    return Config().load(expanduser("~/.keeplog/config"))
+
+
 if __name__ == '__main__':
-    main()
+    logger = setup_logger()
+    config = load_config()
+
+    keeplog = Keeplog(logger, config)
+    keeplog.sync()
