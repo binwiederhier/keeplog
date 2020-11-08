@@ -26,21 +26,7 @@ def main():
 
     # parse log
     logger.info("Parsing local log " + config.file)
-
-    local = {}
-    with open(config.file, encoding='utf-8') as f:
-        for line in f:
-            if re.search('^(\d+)/(\d+)/(\d+) ', line):
-                title = line.strip()
-                local[title] = {"text": ""}
-            elif line.strip() != "--" and title in local:
-                local[title]["text"] = local[title]["text"] + line
-
-    for title in local.keys():
-        new_text = re.sub("\n\s*\n$", "\n", local[title]["text"])  # remove empty line between entries
-        local[title]["text"] = new_text
-        local[title]["checksum"] = md5(new_text)
-
+    local = read_local(config.file)
     logger.info("Read " + str(len(local)) + " entries")
 
     # read keep
@@ -99,19 +85,10 @@ def main():
     logger.info("Read " + str(len(remote)) + " notes from Keep")
 
     # read sync file
-    sync = {}
-    if exists(config.sync_file):
-        with open(config.sync_file, encoding='utf-8') as f:
-            data = json.load(f)
-            if not "notes" in data:
-                raise ValueError(f"Invalid sync file format in file {config.sync_file}")
-            notes = data["notes"]
-            for title in notes.keys():
-                sync[title] = notes[title]
+    sync = read_sync(config.sync_file)
 
     # synchronizing
     logger.info("Updating remote")
-    updated = 0
     local_updated = False
 
     for title in local.keys():
@@ -120,7 +97,6 @@ def main():
             note = keep.createNote(title, local[title]["text"])
             note.labels.add(label)
             sync[title] = {"checksum": md5(local[title]["text"])}
-            updated += 1
         elif remote[title]["note"].text != local[title]["text"]:
             if title in sync:
                 local_changed = local[title]["checksum"] != sync[title]["checksum"]
@@ -129,24 +105,20 @@ def main():
                     logger.info(f"- Updating remotely: {title}")
                     remote[title]["note"].text = local[title]["text"]
                     sync[title] = {"checksum": md5(local[title]["text"])}
-                    updated += 1
                 elif not local_changed and remote_changed:
                     logger.info(f"- Updating locally: {title}")
                     local[title]["text"] = remote[title]["note"].text
                     sync[title] = {"checksum": md5(remote[title]["note"].text)}
                     local_updated = True
-                    updated += 1
                 elif config.on_conflict == "prefer-remote":
                     logger.info(f"- Updating locally (conflict override): {title}")
                     local[title]["text"] = remote[title]["note"].text
                     sync[title] = {"checksum": md5(remote[title]["note"].text)}
                     local_updated = True
-                    updated += 1
                 elif config.on_conflict == "prefer-local":
                     logger.info(f"- Updating remotely (conflict override): {title}")
                     remote[title]["note"].text = local[title]["text"]
                     sync[title] = {"checksum": md5(local[title]["text"])}
-                    updated += 1
                 else:
                     logger.info(f"- Conflict, doing nothing: {title}")
             elif config.on_conflict == "prefer-remote":
@@ -154,12 +126,10 @@ def main():
                 local[title]["text"] = remote[title]["note"].text
                 sync[title] = {"checksum": md5(remote[title]["note"].text)}
                 local_updated = True
-                updated += 1
             elif config.on_conflict == "prefer-local":
                 logger.info(f"- Updating remotely (conflict override): {title}")
                 remote[title]["note"].text = local[title]["text"]
                 sync[title] = {"checksum": md5(local[title]["text"])}
-                updated += 1
             else:
                 logger.info(f"- Conflict, doing nothing: {title}")
         else:
@@ -194,8 +164,25 @@ def main():
         data = {"notes": sync}
         json.dump(data, f)
 
-def md5(s):
-    return hashlib.md5(s.encode("utf-8")).hexdigest()
+def read_local(local_file):
+    local = {}
+
+    # parse file
+    with open(local_file, encoding='utf-8') as f:
+        for line in f:
+            if re.search('^(\d+)/(\d+)/(\d+) ', line):
+                title = line.strip()
+                local[title] = {"text": ""}
+            elif line.strip() != "--" and title in local:
+                local[title]["text"] = local[title]["text"] + line
+
+    # calculate checksum and fix empty lines between entries
+    for title in local.keys():
+        new_text = re.sub("\n\s*\n$", "\n", local[title]["text"])
+        local[title]["text"] = new_text
+        local[title]["checksum"] = md5(new_text)
+
+    return local
 
 def read_token(token_file):
     if exists(token_file):
@@ -208,6 +195,21 @@ def read_state(state_file):
         with open(state_file) as f:
             return json.load(f)
     return None
+
+def read_sync(sync_file):
+    sync = {}
+    if exists(sync_file):
+        with open(sync_file, encoding='utf-8') as f:
+            data = json.load(f)
+            if not "notes" in data:
+                raise ValueError(f"Invalid sync file format in file {sync_file}")
+            notes = data["notes"]
+            for title in notes.keys():
+                sync[title] = notes[title]
+    return sync
+
+def md5(s):
+    return hashlib.md5(s.encode("utf-8")).hexdigest()
 
 class Config:
     def __init__(self):
