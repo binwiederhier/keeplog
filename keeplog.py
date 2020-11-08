@@ -11,7 +11,6 @@ import logging
 from datetime import datetime
 from os.path import expanduser, exists, join
 
-
 def main():
     # set up logging
     logger = logging.getLogger('keeplog')
@@ -22,63 +21,14 @@ def main():
     logger.addHandler(ch)
 
     # read config
-    config = expanduser("~/.keeplog/config")
-
-    username = None
-    password = None
-    file = None
-    sync_file = None
-    state_file = None
-    token_file = None
-    on_conflict = None
-    backup_dir = None
-
-    with open(config, encoding='utf-8') as cfg:
-        for line in cfg:
-            match = re.search("^([^=]+)=(.+)", line)
-            if match:
-                if match.group(1) == "user":
-                    username = match.group(2)
-                elif match.group(1) == "pass":
-                    password = match.group(2)
-                elif match.group(1) == "file":
-                    file = expanduser(match.group(2))
-                elif match.group(1) == "sync-file":
-                    sync_file = expanduser(match.group(2))
-                elif match.group(1) == "state-file":
-                    state_file = expanduser(match.group(2))
-                elif match.group(1) == "token-file":
-                    token_file = expanduser(match.group(2))
-                elif match.group(1) == "on-conflict":
-                    on_conflict = match.group(2)
-                elif match.group(1) == "backup-dir":
-                    backup_dir = match.group(2)
-
-    if not username or not password or not file:
-        raise Exception("Invalid config file, need at least 'user=', 'pass=' and 'file='.")
-
-    if not on_conflict:
-        on_conflict = "prefer-local"
-    elif not on_conflict in ["prefer-local", "prefer-remote", "do-nothing"]:
-        raise Exception("Invalid config file, on-conflict needs to be 'prefer-local', 'prefer-remote' or 'do-nothing'.")
-
-    if not sync_file:
-        sync_file = expanduser("~/.keeplog/state/sync")
-
-    if not state_file:
-        state_file = expanduser("~/.keeplog/state/state")
-
-    if not token_file:
-        token_file = expanduser("~/.keeplog/state/token")
-
-    if not backup_dir:
-        backup_dir = expanduser("~/.keeplog/backups")
+    config = Config()
+    config.load(expanduser("~/.keeplog/config"))
 
     # parse log
-    logger.info("Parsing local log " + file)
+    logger.info("Parsing local log " + config.file)
 
     local = {}
-    with open(file, encoding='utf-8') as f:
+    with open(config.file, encoding='utf-8') as f:
         for line in f:
             if re.search('^(\d+)/(\d+)/(\d+) ', line):
                 title = line.strip()
@@ -97,14 +47,14 @@ def main():
     keep = gkeepapi.Keep()
     logged_in = False
 
-    token = read_token(token_file)
-    state = read_state(state_file)
+    token = read_token(config.token_file)
+    state = read_state(config.state_file)
 
     if token:
         logger.info('Authenticating with token')
 
         try:
-            keep.resume(username, token, state=state, sync=True)
+            keep.resume(config.username, token, state=state, sync=True)
             logged_in = True
             del token
             logger.info('Successfully logged in and synced state')
@@ -115,12 +65,11 @@ def main():
         logger.info('Authenticating with password')
 
         try:
-            keep.login(username, password, state=state, sync=True)
+            keep.login(config.username, config.password, state=state, sync=True)
             logged_in = True
-            del password
 
             token = keep.getMasterToken()
-            with open(token_file, 'w') as f:
+            with open(config.token_file, 'w') as f:
                 f.write(token)
 
             logger.info('Successfully logged in')
@@ -151,11 +100,11 @@ def main():
 
     # read sync file
     sync = {}
-    if exists(sync_file):
-        with open(sync_file, encoding='utf-8') as f:
+    if exists(config.sync_file):
+        with open(config.sync_file, encoding='utf-8') as f:
             data = json.load(f)
             if not "notes" in data:
-                raise ValueError(f"Invalid sync file format in file {sync_file}")
+                raise ValueError(f"Invalid sync file format in file {config.sync_file}")
             notes = data["notes"]
             for title in notes.keys():
                 sync[title] = notes[title]
@@ -187,26 +136,26 @@ def main():
                     sync[title] = {"checksum": md5(remote[title]["note"].text)}
                     local_updated = True
                     updated += 1
-                elif on_conflict == "prefer-remote":
+                elif config.on_conflict == "prefer-remote":
                     logger.info(f"- Updating locally (conflict override): {title}")
                     local[title]["text"] = remote[title]["note"].text
                     sync[title] = {"checksum": md5(remote[title]["note"].text)}
                     local_updated = True
                     updated += 1
-                elif on_conflict == "prefer-local":
+                elif config.on_conflict == "prefer-local":
                     logger.info(f"- Updating remotely (conflict override): {title}")
                     remote[title]["note"].text = local[title]["text"]
                     sync[title] = {"checksum": md5(local[title]["text"])}
                     updated += 1
                 else:
                     logger.info(f"- Conflict, doing nothing: {title}")
-            elif on_conflict == "prefer-remote":
+            elif config.on_conflict == "prefer-remote":
                 logger.info(f"- Updating locally (conflict override): {title}")
                 local[title]["text"] = remote[title]["note"].text
                 sync[title] = {"checksum": md5(remote[title]["note"].text)}
                 local_updated = True
                 updated += 1
-            elif on_conflict == "prefer-local":
+            elif config.on_conflict == "prefer-local":
                 logger.info(f"- Updating remotely (conflict override): {title}")
                 remote[title]["note"].text = local[title]["text"]
                 sync[title] = {"checksum": md5(local[title]["text"])}
@@ -218,18 +167,18 @@ def main():
 
     keep.sync()
     state = keep.dump()
-    with open(state_file, 'w') as f:
+    with open(config.state_file, 'w') as f:
         json.dump(state, f)
     logger.info("Done")
 
     if local_updated:
         logger.info("Updating log file")
 
-        os.makedirs(backup_dir, exist_ok=True)
-        backup_file = join(backup_dir, datetime.now().strftime("%y%m%d%H%M%S"))
-        shutil.copyfile(file, backup_file)
+        os.makedirs(config.backup_dir, exist_ok=True)
+        backup_file = join(config.backup_dir, datetime.now().strftime("%y%m%d%H%M%S"))
+        shutil.copyfile(config.file, backup_file)
 
-        with open(file, mode="w", encoding="utf-8") as f:
+        with open(config.file, mode="w", encoding="utf-8") as f:
             for title in local.keys():
                 f.write(title + "\n")
                 f.write("--\n")
@@ -241,7 +190,7 @@ def main():
 
     # write sync file
     logger.info("Writing sync file")
-    with open(sync_file, mode="w", encoding="utf-8") as f:
+    with open(config.sync_file, mode="w", encoding="utf-8") as f:
         data = {"notes": sync}
         json.dump(data, f)
 
@@ -259,6 +208,53 @@ def read_state(state_file):
         with open(state_file) as f:
             return json.load(f)
     return None
+
+class Config:
+    def __init__(self):
+        self.username = None
+        self.password = None
+        self.file = None
+        self.on_conflict = "prefer-local"
+        self.sync_file = expanduser("~/.keeplog/state/sync")
+        self.state_file = expanduser("~/.keeplog/state/state")
+        self.token_file = expanduser("~/.keeplog/state/token")
+        self.backup_dir = expanduser("~/.keeplog/backups")
+
+    def load(self, config_file):
+        if not exists(config_file):
+            raise Exception("Config file " + config_file + " does not exist")
+
+        with open(config_file, encoding='utf-8') as cfg:
+            for line in cfg:
+                match = re.search("^([^=]+)=(.+)", line)
+                if match:
+                    if match.group(1) == "user":
+                        self.username = match.group(2)
+                    elif match.group(1) == "pass":
+                        self.password = match.group(2)
+                    elif match.group(1) == "file":
+                        self.file = expanduser(match.group(2))
+                    elif match.group(1) == "sync-file":
+                        self.sync_file = expanduser(match.group(2))
+                    elif match.group(1) == "state-file":
+                        self.state_file = expanduser(match.group(2))
+                    elif match.group(1) == "token-file":
+                        self.token_file = expanduser(match.group(2))
+                    elif match.group(1) == "on-conflict":
+                        self.on_conflict = match.group(2)
+                    elif match.group(1) == "backup-dir":
+                        self.backup_dir = match.group(2)
+
+        if not self.username or not self.password or not self.file:
+            raise Exception("Invalid config file, need at least 'user=', 'pass=' and 'file='.")
+
+        if not self.on_conflict in ["prefer-local", "prefer-remote", "do-nothing"]:
+            raise Exception("Invalid config file, on-conflict needs to be 'prefer-local', 'prefer-remote' or 'do-nothing'.")
+
+class Keeplog:
+    def __init__(self):
+        pass
+
 
 if __name__ == '__main__':
     main()
