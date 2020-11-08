@@ -21,74 +21,15 @@ class Keeplog:
     def sync(self):
         self.read_state()
         self.login()
-
-        local = self.read_local()
-        remote = self.read_remote()
-        checksums = self.state.checksums
-
-        # synchronizing
-        self.logger.info("Comparing remote and local")
-        local_updated = False
-        label = self.keep.getLabel(self.config.label)
-
-        for title in local.keys():
-            if title not in remote:
-                self.logger.info(f"- Creating remotely: {title}")
-                note = self.keep.createNote(title, local[title].text())
-                note.labels.add(label)
-                checksums[title] = local[title].checksum()
-            elif remote[title].text() != local[title].text():
-                if title in checksums:
-                    local_changed = local[title].checksum() != checksums[title]
-                    remote_changed = remote[title].checksum() != checksums[title]
-                    if local_changed and not remote_changed:
-                        self.logger.info(f"- Updating remotely: {title}")
-                        remote[title].text(local[title].text())
-                        checksums[title] = local[title].checksum()
-                    elif not local_changed and remote_changed:
-                        self.logger.info(f"- Updating locally: {title}")
-                        local[title].text(remote[title].text())
-                        checksums[title] = remote[title].checksum()
-                        local_updated = True
-                    elif self.config.on_conflict == "prefer-remote":
-                        self.logger.info(f"- Updating locally (conflict override): {title}")
-                        local[title].text(remote[title].text())
-                        checksums[title] = remote[title].checksum()
-                        local_updated = True
-                    elif self.config.on_conflict == "prefer-local":
-                        self.logger.info(f"- Updating remotely (conflict override): {title}")
-                        remote[title].text(local[title].text())
-                        checksums[title] = local[title].checksum()
-                    else:
-                        self.logger.info(f"- Conflict, doing nothing: {title}")
-                elif self.config.on_conflict == "prefer-remote":
-                    self.logger.info(f"- Updating locally (conflict override): {title}")
-                    local[title].text(remote[title].text())
-                    checksums[title] = remote[title].checksum()
-                    local_updated = True
-                elif self.config.on_conflict == "prefer-local":
-                    self.logger.info(f"- Updating remotely (conflict override): {title}")
-                    remote[title].text(local[title].text())
-                    checksums[title] = local[title].checksum()
-                else:
-                    self.logger.info(f"- Conflict, doing nothing: {title}")
-            else:
-                checksums[title] = local[title].checksum()
-
-        self.keep.sync()
-
-        if local_updated:
-            self.backup_local()
-            self.write_local(local)
-        else:
-            self.logger.info("Nothing to update locally")
-
-        self.state.keep = self.keep.dump()
-        self.state.checksums = checksums
-        self.state.write(self.config.state_file)
+        self.compare()
+        self.write_state()
 
     def read_state(self):
         self.state.load(self.config.state_file)
+
+    def write_state(self):
+        self.state.keep = self.keep.dump()
+        self.state.write(self.config.state_file)
 
     def read_local(self):
         self.logger.info("Reading local notes")
@@ -175,6 +116,67 @@ class Keeplog:
                 f.write(local[title]["text"] + "\n")
                 if not local[title]["text"].endswith("\n"):
                     f.write("\n")  # ensure empty line between entries
+
+    def compare(self):
+        self.logger.info("Comparing remote and local")
+
+        local = self.read_local()
+        local_updated = False
+        remote = self.read_remote()
+        remote_label = self.keep.getLabel(self.config.label)
+        checksums = self.state.checksums
+
+        for title in local.keys():
+            if title not in remote:
+                self.logger.info(f"- Creating remotely: {title}")
+                note = self.keep.createNote(title, local[title].text())
+                note.labels.add(remote_label)
+                checksums[title] = local[title].checksum()
+            elif remote[title].text() != local[title].text():
+                if title in checksums:
+                    local_changed = local[title].checksum() != checksums[title]
+                    remote_changed = remote[title].checksum() != checksums[title]
+                    if local_changed and not remote_changed:
+                        self.logger.info(f"- Updating remotely: {title}")
+                        remote[title].text(local[title].text())
+                        checksums[title] = local[title].checksum()
+                    elif not local_changed and remote_changed:
+                        self.logger.info(f"- Updating locally: {title}")
+                        local[title].text(remote[title].text())
+                        checksums[title] = remote[title].checksum()
+                        local_updated = True
+                    elif self.config.on_conflict == "prefer-remote":
+                        self.logger.info(f"- Updating locally (conflict override): {title}")
+                        local[title].text(remote[title].text())
+                        checksums[title] = remote[title].checksum()
+                        local_updated = True
+                    elif self.config.on_conflict == "prefer-local":
+                        self.logger.info(f"- Updating remotely (conflict override): {title}")
+                        remote[title].text(local[title].text())
+                        checksums[title] = local[title].checksum()
+                    else:
+                        self.logger.info(f"- Conflict, doing nothing: {title}")
+                elif self.config.on_conflict == "prefer-remote":
+                    self.logger.info(f"- Updating locally (conflict override): {title}")
+                    local[title].text(remote[title].text())
+                    checksums[title] = remote[title].checksum()
+                    local_updated = True
+                elif self.config.on_conflict == "prefer-local":
+                    self.logger.info(f"- Updating remotely (conflict override): {title}")
+                    remote[title].text(local[title].text())
+                    checksums[title] = local[title].checksum()
+                else:
+                    self.logger.info(f"- Conflict, doing nothing: {title}")
+            else:
+                checksums[title] = local[title].checksum()
+
+        self.keep.sync()
+
+        if local_updated:
+            self.backup_local()
+            self.write_local(local)
+        else:
+            self.logger.info("Nothing to update locally")
 
 class Note:
     def text(self, v=None):
