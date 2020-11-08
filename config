@@ -1,0 +1,50 @@
+# This is the keeplog config file.
+# Place this in ~/.keeplog/config
+
+# Google account user/email
+# This setting is MANDATORY.
+#
+# user=
+
+# Google account password. It's best to use app passwords (see https://myaccount.google.com/apppasswords),
+# the main account password may not work. This setting is MANDATORY.
+#
+# pass=
+
+# Your daily log file. That's the file you use update every day.
+# The file has a very specific (but simple) format.
+#
+# Format:
+#   11/1/20 Sunday
+#   --
+#   Some text
+#
+# Please note that the log entry title is used as the identifier for the post.
+# It should not be changed. The filename can contain "~" which expand to the
+# home directory, e.g. ~/LOG. This setting is MANDATORY.
+#
+# file=
+
+# Label to be used in Keep to identify relevant entries
+#
+# label=keeplog
+
+# State file: This file is used to to store
+# - checksums of the last synchronization run
+# - the internal Keep state (to facitilate a faster login)
+# - the Keep master token (to avoid password-based logins)
+#
+# state-file=~/.keeplog/state
+
+# Conflict strategy: Decides what happens if local and remote
+# are edited at the same time:
+#
+# - prefer-local (default): Overwrites changed in Google Keep
+# - prefer-remote: Overwrites changed in the local log file
+# - do-nothing: Just reports conflicts in the output
+#
+# on-conflict=do-nothing
+
+# Backup directory for local LOG files. Every time the local file is updated due
+# to a remote change, the current local file is copied to this directory.
+# backup-dir=~/.keeplog/backups
