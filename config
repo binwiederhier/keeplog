@@ -21,6 +21,10 @@ pass=your-app-password
 #
 file=~/LOG
 
+# Label to be used in Keep to identify relevant entries
+#
+# label=log
+
 # Sync file: This file is used to keep track of changes to
 # facilitate synchronization. It's not meant to be edited by you.
 #

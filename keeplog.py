@@ -30,51 +30,51 @@ class Keeplog:
         # synchronizing
         self.logger.info("Comparing remote and local")
         local_updated = False
-        label = self.keep.getLabel('log')
+        label = self.keep.getLabel(self.config.label)
 
         for title in local.keys():
             if not title in remote:
                 self.logger.info(f"- Creating remotely: {title}")
-                note = self.keep.createNote(title, local[title]["text"])
+                note = self.keep.createNote(title, local[title].text())
                 note.labels.add(label)
-                sync[title] = {"checksum": self.md5(local[title]["text"])}
-            elif remote[title]["note"].text != local[title]["text"]:
+                sync[title] = {"checksum": local[title].checksum()}
+            elif remote[title].text() != local[title].text():
                 if title in sync:
-                    local_changed = local[title]["checksum"] != sync[title]["checksum"]
-                    remote_changed = remote[title]["checksum"] != sync[title]["checksum"]
+                    local_changed = local[title].checksum() != sync[title]["checksum"]
+                    remote_changed = remote[title].checksum() != sync[title]["checksum"]
                     if local_changed and not remote_changed:
                         self.logger.info(f"- Updating remotely: {title}")
-                        remote[title]["note"].text = local[title]["text"]
-                        sync[title] = {"checksum": self.md5(local[title]["text"])}
+                        remote[title].text(local[title].text())
+                        sync[title] = {"checksum": local[title].checksum()}
                     elif not local_changed and remote_changed:
                         self.logger.info(f"- Updating locally: {title}")
-                        local[title]["text"] = remote[title]["note"].text
-                        sync[title] = {"checksum": self.md5(remote[title]["note"].text)}
+                        local[title].text(remote[title].text())
+                        sync[title] = {"checksum": remote[title].checksum()}
                         local_updated = True
                     elif self.config.on_conflict == "prefer-remote":
                         self.logger.info(f"- Updating locally (conflict override): {title}")
-                        local[title]["text"] = remote[title]["note"].text
-                        sync[title] = {"checksum": self.md5(remote[title]["note"].text)}
+                        local[title].text(remote[title].text())
+                        sync[title] = {"checksum": remote[title].checksum()}
                         local_updated = True
                     elif self.config.on_conflict == "prefer-local":
                         self.logger.info(f"- Updating remotely (conflict override): {title}")
-                        remote[title]["note"].text = local[title]["text"]
-                        sync[title] = {"checksum": self.md5(local[title]["text"])}
+                        remote[title].text(local[title].text())
+                        sync[title] = {"checksum": local[title].checksum()}
                     else:
                         self.logger.info(f"- Conflict, doing nothing: {title}")
                 elif self.config.on_conflict == "prefer-remote":
                     self.logger.info(f"- Updating locally (conflict override): {title}")
-                    local[title]["text"] = remote[title]["note"].text
-                    sync[title] = {"checksum": self.md5(remote[title]["note"].text)}
+                    local[title].text(remote[title].text())
+                    sync[title] = {"checksum": remote[title].checksum()}
                     local_updated = True
                 elif self.config.on_conflict == "prefer-local":
                     self.logger.info(f"- Updating remotely (conflict override): {title}")
-                    remote[title]["note"].text = local[title]["text"]
-                    sync[title] = {"checksum": self.md5(local[title]["text"])}
+                    remote[title].text(local[title].text())
+                    sync[title] = {"checksum": local[title].checksum()}
                 else:
                     self.logger.info(f"- Conflict, doing nothing: {title}")
             else:
-                sync[title] = {"checksum": self.md5(local[title]["text"])}
+                sync[title] = {"checksum": local[title].checksum()}
 
         self.keep.sync()
         self.write_state()
@@ -94,17 +94,15 @@ class Keeplog:
         # parse file
         with open(self.config.file, encoding='utf-8') as f:
             for line in f:
-                if re.search('^(\d+)/(\d+)/(\d+) ', line):
+                if re.search('^\d+/\d+/\d+ ', line):
                     title = line.strip()
-                    local[title] = {"text": ""}
+                    local[title] = LocalNote()
                 elif line.strip() != "--" and title in local:
-                    local[title]["text"] = local[title]["text"] + line
+                    local[title].content += line
 
-        # calculate checksum and fix empty lines between entries
+        # fix empty lines between entries
         for title in local.keys():
-            new_text = re.sub("\n\s*\n$", "\n", local[title]["text"])
-            local[title]["text"] = new_text
-            local[title]["checksum"] = self.md5(new_text)
+            local[title].text(re.sub("\n\s*\n$", "\n", local[title].text()))
 
         return local
 
@@ -112,17 +110,12 @@ class Keeplog:
         self.logger.info("Reading remote notes")
 
         remote = {}
-        label = self.keep.findLabel('log')
+        label = self.keep.findLabel(self.config.label)
 
         note: gkeepapi.node.TopLevelNode
         for note in self.keep.find(labels=[label]):
-            if not re.search('^\d+/\d+/\d+ ', note.title):
-                self.logger.warning(f"{note.title} - Skipping, title mismatch")
-                continue
-            remote[note.title] = {
-                "checksum": self.md5(note.text),
-                "note": note
-            }
+            if re.search('^\d+/\d+/\d+ ', note.title):
+                remote[note.title] = RemoteNote(note)
 
         return remote
 
@@ -229,15 +222,37 @@ class Keeplog:
     def make_parent(self, file):
         Path(file).parent.mkdir(mode=0o755, parents=True, exist_ok=True)
 
-    def md5(self, s):
-        return hashlib.md5(s.encode("utf-8")).hexdigest()
+class Note:
+    def text(self, v=None):
+        raise Exception("Not implemented")
 
+    def checksum(self):
+        return hashlib.md5(self.text().encode("utf-8")).hexdigest()
+
+class RemoteNote(Note):
+    def __init__(self, note):
+        self.note = note
+
+    def text(self, v=None):
+        if v is not None:
+            self.note.text = v
+        return self.note.text
+
+class LocalNote(Note):
+    def __init__(self, content=""):
+        self.content = content
+
+    def text(self, v=None):
+        if v is not None:
+            self.content = v
+        return self.content
 
 class Config:
     def __init__(self):
         self.username = None
         self.password = None
         self.file = None
+        self.label = "log"
         self.on_conflict = "prefer-local"
         self.sync_file = expanduser("~/.keeplog/state/sync")
         self.state_file = expanduser("~/.keeplog/state/state")
@@ -258,6 +273,8 @@ class Config:
                         self.password = match.group(2)
                     elif match.group(1) == "file":
                         self.file = expanduser(match.group(2))
+                    elif match.group(1) == "label":
+                        self.label = match.group(2)
                     elif match.group(1) == "sync-file":
                         self.sync_file = expanduser(match.group(2))
                     elif match.group(1) == "state-file":
