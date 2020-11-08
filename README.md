@@ -32,7 +32,7 @@ Installation
 2. Create a config file `~/.keeplog/config` from [this template](config). Be sure to edit at least 
    `user=`, `pass=` and `file=`.
 3. Install dependencies via `pip3 install -r requirements.txt`.
-4. Run `./keeplog.py`, you'll see something like this:
+4. Run `./keeplog.py` (manually, or on a cron). You'll see something like this:
 
 ```
 2020-11-08 13:33:50,038 [INFO] Logging in with token
