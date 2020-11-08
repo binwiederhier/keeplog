@@ -11,6 +11,7 @@ import logging
 from datetime import datetime
 from os.path import expanduser, exists, join
 
+
 def main():
     # set up logging
     logger = logging.getLogger('keeplog')
@@ -21,7 +22,7 @@ def main():
     logger.addHandler(ch)
 
     # read config
-    config = expanduser("~/.keeplog/keeplog.conf")
+    config = expanduser("~/.keeplog/config")
 
     username = None
     password = None
@@ -62,13 +63,13 @@ def main():
         raise Exception("Invalid config file, on-conflict needs to be 'prefer-local', 'prefer-remote' or 'do-nothing'.")
 
     if not sync_file:
-        sync_file = expanduser("~/.keeplog/keeplog.sync")
+        sync_file = expanduser("~/.keeplog/state/sync")
 
     if not state_file:
-        state_file = expanduser("~/.keeplog/keeplog.state")
+        state_file = expanduser("~/.keeplog/state/state")
 
     if not token_file:
-        token_file = expanduser("~/.keeplog/keeplog.token")
+        token_file = expanduser("~/.keeplog/state/token")
 
     if not backup_dir:
         backup_dir = expanduser("~/.keeplog/backups")
@@ -86,7 +87,7 @@ def main():
                 local[title]["text"] = local[title]["text"] + line
 
     for title in local.keys():
-        new_text = re.sub("\n\s*\n$", "\n", local[title]["text"]) # remove empty line between entries
+        new_text = re.sub("\n\s*\n$", "\n", local[title]["text"])  # remove empty line between entries
         local[title]["text"] = new_text
         local[title]["checksum"] = md5(new_text)
 
@@ -96,15 +97,8 @@ def main():
     keep = gkeepapi.Keep()
     logged_in = False
 
-    token = None
-    if exists(token_file):
-        with open(token_file) as f:
-            token = f.read().strip()
-
-    state = None
-    if exists(state_file):
-        with open(state_file) as f:
-            state = json.load(f)
+    token = read_token(token_file)
+    state = read_state(state_file)
 
     if token:
         logger.info('Authenticating with token')
@@ -241,7 +235,7 @@ def main():
                 f.write("--\n")
                 f.write(local[title]["text"] + "\n")
                 if not local[title]["text"].endswith("\n"):
-                    f.write("\n") # ensure empty line between entries
+                    f.write("\n")  # ensure empty line between entries
     else:
         logger.info("Nothing to update locally")
 
@@ -253,6 +247,18 @@ def main():
 
 def md5(s):
     return hashlib.md5(s.encode("utf-8")).hexdigest()
+
+def read_token(token_file):
+    if exists(token_file):
+        with open(token_file) as f:
+            return f.read().strip()
+    return None
+
+def read_state(state_file):
+    if exists(state_file):
+        with open(state_file) as f:
+            return json.load(f)
+    return None
 
 if __name__ == '__main__':
     main()
