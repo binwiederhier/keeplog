@@ -243,7 +243,7 @@ class Keeplog:
             json.dump(data, f)
 
     def write_local(self, local):
-        self.logger.info("Updating local notes")
+        self.logger.info("Writing local notes")
         with open(self.config.file, mode="w", encoding="utf-8") as f:
             for title in local.keys():
                 f.write(title + "\n")
