@@ -1,15 +1,25 @@
 #!/usr/bin/env python3
 
+import sys
 import gkeepapi
 import re
 import json
 import hashlib
 import os
 import shutil
+import logging
 from datetime import datetime
 from os.path import expanduser, exists, join
 
 def main():
+    # set up logging
+    logger = logging.getLogger('keeplog')
+    logger.setLevel(logging.INFO)
+    ch = logging.StreamHandler(sys.stdout)
+    formatter = logging.Formatter('%(asctime)s [%(levelname)s] %(message)s')
+    ch.setFormatter(formatter)
+    logger.addHandler(ch)
+
     # read config
     config = expanduser("~/.keeplog/keeplog.conf")
 
@@ -17,6 +27,8 @@ def main():
     password = None
     file = None
     sync_file = None
+    state_file = None
+    token_file = None
     on_conflict = None
     backup_dir = None
 
@@ -32,6 +44,10 @@ def main():
                     file = expanduser(match.group(2))
                 elif match.group(1) == "sync-file":
                     sync_file = expanduser(match.group(2))
+                elif match.group(1) == "state-file":
+                    state_file = expanduser(match.group(2))
+                elif match.group(1) == "token-file":
+                    token_file = expanduser(match.group(2))
                 elif match.group(1) == "on-conflict":
                     on_conflict = match.group(2)
                 elif match.group(1) == "backup-dir":
@@ -48,11 +64,17 @@ def main():
     if not sync_file:
         sync_file = expanduser("~/.keeplog/keeplog.sync")
 
+    if not state_file:
+        state_file = expanduser("~/.keeplog/keeplog.state")
+
+    if not token_file:
+        token_file = expanduser("~/.keeplog/keeplog.token")
+
     if not backup_dir:
         backup_dir = expanduser("~/.keeplog/backups")
 
     # parse log
-    print("Parsing log ... ", end="", flush=True)
+    logger.info("Parsing local log " + file)
 
     local = {}
     with open(file, encoding='utf-8') as f:
@@ -68,13 +90,55 @@ def main():
         local[title]["text"] = new_text
         local[title]["checksum"] = md5(new_text)
 
-    print(str(len(local)) + " entries.")
+    logger.info("Read " + str(len(local)) + " entries")
 
     # read keep
-    print("Reading Keep notes ... ", end="", flush=True)
-
     keep = gkeepapi.Keep()
-    keep.login(username, password)
+    logged_in = False
+
+    token = None
+    if exists(token_file):
+        with open(token_file) as f:
+            token = f.read().strip()
+
+    state = None
+    if exists(state_file):
+        with open(state_file) as f:
+            state = json.load(f)
+
+    if token:
+        logger.info('Authenticating with token')
+
+        try:
+            keep.resume(username, token, state=state, sync=True)
+            logged_in = True
+            del token
+            logger.info('Successfully logged in and synced state')
+        except gkeepapi.exception.LoginException:
+            logger.warning('Invalid token, falling back to password')
+
+    if not logged_in:
+        logger.info('Authenticating with password')
+
+        try:
+            keep.login(username, password, state=state, sync=True)
+            logged_in = True
+            del password
+
+            token = keep.getMasterToken()
+            with open(token_file, 'w') as f:
+                f.write(token)
+
+            logger.info('Successfully logged in')
+        except gkeepapi.exception.LoginException:
+            logger.info('Login failed')
+
+    if not logged_in:
+        logger.error('Failed to authenticate')
+        sys.exit(1)
+
+    # Read notes
+    logger.info("Reading Keep notes")
 
     remote = {}
     label = keep.findLabel('log')
@@ -82,14 +146,14 @@ def main():
     note: gkeepapi.node.TopLevelNode
     for note in keep.find(labels=[label]):
         if not re.search('^\d+/\d+/\d+ ', note.title):
-            print(f"{note.title} - Skipping, title mismatch")
+            logger.warning(f"{note.title} - Skipping, title mismatch")
             continue
         remote[note.title] = {
             "checksum": md5(note.text),
             "note": note
         }
 
-    print(str(len(remote)) + " notes.")
+    logger.info("Read " + str(len(remote)) + " notes from Keep")
 
     # read sync file
     sync = {}
@@ -102,14 +166,14 @@ def main():
             for title in notes.keys():
                 sync[title] = notes[title]
 
-    # update keep
-    print("Updating Keep ... ")
+    # synchronizing
+    logger.info("Updating remote")
     updated = 0
     local_updated = False
 
     for title in local.keys():
         if not title in remote:
-            print(f"- Creating remotely: {title}")
+            logger.info(f"- Creating remotely: {title}")
             note = keep.createNote(title, local[title]["text"])
             note.labels.add(label)
             sync[title] = {"checksum": md5(local[title]["text"])}
@@ -119,50 +183,53 @@ def main():
                 local_changed = local[title]["checksum"] != sync[title]["checksum"]
                 remote_changed = remote[title]["checksum"] != sync[title]["checksum"]
                 if local_changed and not remote_changed:
-                    print(f"- Updating remotely: {title}")
+                    logger.info(f"- Updating remotely: {title}")
                     remote[title]["note"].text = local[title]["text"]
                     sync[title] = {"checksum": md5(local[title]["text"])}
                     updated += 1
                 elif not local_changed and remote_changed:
-                    print(f"- Updating locally: {title}")
+                    logger.info(f"- Updating locally: {title}")
                     local[title]["text"] = remote[title]["note"].text
                     sync[title] = {"checksum": md5(remote[title]["note"].text)}
                     local_updated = True
                     updated += 1
                 elif on_conflict == "prefer-remote":
-                    print(f"- Updating locally (conflict override): {title}")
+                    logger.info(f"- Updating locally (conflict override): {title}")
                     local[title]["text"] = remote[title]["note"].text
                     sync[title] = {"checksum": md5(remote[title]["note"].text)}
                     local_updated = True
                     updated += 1
                 elif on_conflict == "prefer-local":
-                    print(f"- Updating remotely (conflict override): {title}")
+                    logger.info(f"- Updating remotely (conflict override): {title}")
                     remote[title]["note"].text = local[title]["text"]
                     sync[title] = {"checksum": md5(local[title]["text"])}
                     updated += 1
                 else:
-                    print(f"- Conflict, doing nothing: {title}")
+                    logger.info(f"- Conflict, doing nothing: {title}")
             elif on_conflict == "prefer-remote":
-                print(f"- Updating locally (conflict override): {title}")
+                logger.info(f"- Updating locally (conflict override): {title}")
                 local[title]["text"] = remote[title]["note"].text
                 sync[title] = {"checksum": md5(remote[title]["note"].text)}
                 local_updated = True
                 updated += 1
             elif on_conflict == "prefer-local":
-                print(f"- Updating remotely (conflict override): {title}")
+                logger.info(f"- Updating remotely (conflict override): {title}")
                 remote[title]["note"].text = local[title]["text"]
                 sync[title] = {"checksum": md5(local[title]["text"])}
                 updated += 1
             else:
-                print(f"- Conflict, doing nothing: {title}")
+                logger.info(f"- Conflict, doing nothing: {title}")
         else:
             sync[title] = {"checksum": md5(local[title]["text"])}
 
     keep.sync()
-    print(str(updated) + " updated.")
+    state = keep.dump()
+    with open(state_file, 'w') as f:
+        json.dump(state, f)
+    logger.info("Done")
 
     if local_updated:
-        print("Updating log file ...")
+        logger.info("Updating log file")
 
         os.makedirs(backup_dir, exist_ok=True)
         backup_file = join(backup_dir, datetime.now().strftime("%y%m%d%H%M%S"))
@@ -175,13 +242,14 @@ def main():
                 f.write(local[title]["text"] + "\n")
                 if not local[title]["text"].endswith("\n"):
                     f.write("\n") # ensure empty line between entries
+    else:
+        logger.info("Nothing to update locally")
 
     # write sync file
-    print("Writing sync file ... ", end="", flush=True)
+    logger.info("Writing sync file")
     with open(sync_file, mode="w", encoding="utf-8") as f:
         data = {"notes": sync}
         json.dump(data, f)
-    print("Done.")
 
 def md5(s):
     return hashlib.md5(s.encode("utf-8")).hexdigest()
