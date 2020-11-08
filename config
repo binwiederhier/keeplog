@@ -39,9 +39,9 @@
 # Conflict strategy: Decides what happens if local and remote
 # are edited at the same time:
 #
-# - prefer-local (default): Overwrites changed in Google Keep
+# - do-nothing (default): Just reports conflicts in the output
+# - prefer-local: Overwrites changed in Google Keep
 # - prefer-remote: Overwrites changed in the local log file
-# - do-nothing: Just reports conflicts in the output
 #
 # on-conflict=do-nothing
 

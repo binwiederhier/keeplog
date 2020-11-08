@@ -1,8 +1,10 @@
 keeplog
 --
-keeplog is a simple two-way synchronization tool to sync a local daily log with [Google Keep](https://keep.google.com). 
+**keeplog** is a simple two-way synchronization tool to sync a local daily log with [Google Keep](https://keep.google.com). 
 When run, keeplog parses the local file and synchronizes each entry to individual Keep notes. Updates within Keep are 
 populated to the local file as well.
+
+_keeplog is work-in-progress, so use with caution!_
 
 I mainly wrote it to learn Python and to support my workflow: I keep a local file in `~/LOG` with one entry 
 per day, like this:
@@ -45,4 +47,5 @@ Installation
 
 Copyright
 --
-Philipp C. Heckel, licensed under the Apache 2.0 License 
+Philipp C. Heckel, licensed under the Apache 2.0 License   
+Thanks very much to [kiwiz](https://github.com/kiwiz) for his excellent [gkeepapi](https://github.com/kiwiz/gkeepapi). 
