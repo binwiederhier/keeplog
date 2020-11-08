@@ -13,6 +13,7 @@ from pathlib import Path
 
 import gkeepapi
 
+
 class Keeplog:
     def __init__(self, logger, config):
         self.logger = logger
@@ -94,7 +95,7 @@ class Keeplog:
         # parse file
         with open(self.config.file, encoding='utf-8') as f:
             for line in f:
-                if re.search('^\d+/\d+/\d+ ', line):
+                if re.search('^\\d+/\\d+/\\d+ ', line):
                     title = line.strip()
                     local[title] = LocalNote()
                 elif line.strip() != "--" and title in local:
@@ -102,7 +103,7 @@ class Keeplog:
 
         # fix empty lines between entries
         for title in local.keys():
-            local[title].text(re.sub("\n\s*\n$", "\n", local[title].text()))
+            local[title].text(re.sub("\n\\s*\n$", "\n", local[title].text()))
 
         return local
 
@@ -114,7 +115,7 @@ class Keeplog:
 
         note: gkeepapi.node.TopLevelNode
         for note in self.keep.find(labels=[label]):
-            if re.search('^\d+/\d+/\d+ ', note.title):
+            if re.search('^\\d+/\\d+/\\d+ ', note.title):
                 remote[note.title] = RemoteNote(note)
 
         return remote
@@ -222,12 +223,14 @@ class Keeplog:
     def make_parent(self, file):
         Path(file).parent.mkdir(mode=0o755, parents=True, exist_ok=True)
 
+
 class Note:
     def text(self, v=None):
         raise Exception("Not implemented")
 
     def checksum(self):
         return hashlib.md5(self.text().encode("utf-8")).hexdigest()
+
 
 class RemoteNote(Note):
     def __init__(self, note):
@@ -238,6 +241,7 @@ class RemoteNote(Note):
             self.note.text = v
         return self.note.text
 
+
 class LocalNote(Note):
     def __init__(self, content=""):
         self.content = content
@@ -246,6 +250,7 @@ class LocalNote(Note):
         if v is not None:
             self.content = v
         return self.content
+
 
 class Config:
     def __init__(self):
@@ -289,7 +294,7 @@ class Config:
         if not self.username or not self.password or not self.file:
             raise Exception("Invalid config file, need at least 'user=', 'pass=' and 'file='.")
 
-        if not self.on_conflict in ["prefer-local", "prefer-remote", "do-nothing"]:
+        if self.on_conflict not in ["prefer-local", "prefer-remote", "do-nothing"]:
             raise Exception(
                 "Invalid config file, on-conflict needs to be 'prefer-local', 'prefer-remote' or 'do-nothing'.")
 
