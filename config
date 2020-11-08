@@ -1,5 +1,5 @@
 # This is the keeplog config file.
-# Place this in ~/.keeplog/keeplog.conf
+# Place this in ~/.keeplog/config
 
 # Google account user/email
 user=your.email@gmail.com
@@ -24,7 +24,17 @@ file=~/LOG
 # Sync file: This file is used to keep track of changes to
 # facilitate synchronization. It's not meant to be edited by you.
 #
-# sync-file=~/.keeplog/keeplog.sync
+# sync-file=~/.keeplog/state/sync
+
+# State file: This file is used to to store the Google Keep state locally,
+# to facitilate a faster login.
+#
+# state-file=~/.keeplog/state/state
+
+# Token file: This file is used to store the master token returned by
+# the Keep API. This is used to login instead of the password.
+#
+# token-file=~/.keeplog/state/token
 
 # Conflict strategy: Decides what happens if local and remote
 # are edited at the same time:

@@ -1,28 +1,24 @@
 #!/usr/bin/env python3
 
-import sys
-import gkeepapi
-import re
-import json
 import hashlib
-import os
-import shutil
+import json
 import logging
+import os
+import re
+import shutil
+import sys
 from datetime import datetime
 from os.path import expanduser, exists, join
 
-def main():
-    # set up logging
-    logger = logging.getLogger('keeplog')
-    logger.setLevel(logging.INFO)
-    ch = logging.StreamHandler(sys.stdout)
-    formatter = logging.Formatter('%(asctime)s [%(levelname)s] %(message)s')
-    ch.setFormatter(formatter)
-    logger.addHandler(ch)
+import gkeepapi
 
-    # read config
-    config = Config()
-    config.load(expanduser("~/.keeplog/config"))
+
+def main():
+    logger = setup_logger()
+    config = load_config()
+
+    keeplog = Keeplog(logger, config)
+    keeplog.sync()
 
     # parse log
     logger.info("Parsing local log " + config.file)
@@ -69,18 +65,7 @@ def main():
     # Read notes
     logger.info("Reading Keep notes")
 
-    remote = {}
-    label = keep.findLabel('log')
-
-    note: gkeepapi.node.TopLevelNode
-    for note in keep.find(labels=[label]):
-        if not re.search('^\d+/\d+/\d+ ', note.title):
-            logger.warning(f"{note.title} - Skipping, title mismatch")
-            continue
-        remote[note.title] = {
-            "checksum": md5(note.text),
-            "note": note
-        }
+    remote = read_remote(keep, logger)
 
     logger.info("Read " + str(len(remote)) + " notes from Keep")
 
@@ -90,6 +75,7 @@ def main():
     # synchronizing
     logger.info("Updating remote")
     local_updated = False
+    label = keep.getLabel('log')
 
     for title in local.keys():
         if not title in remote:
@@ -143,10 +129,7 @@ def main():
 
     if local_updated:
         logger.info("Updating log file")
-
-        os.makedirs(config.backup_dir, exist_ok=True)
-        backup_file = join(config.backup_dir, datetime.now().strftime("%y%m%d%H%M%S"))
-        shutil.copyfile(config.file, backup_file)
+        backup_local(config.backup_dir, config.file)
 
         with open(config.file, mode="w", encoding="utf-8") as f:
             for title in local.keys():
@@ -163,6 +146,7 @@ def main():
     with open(config.sync_file, mode="w", encoding="utf-8") as f:
         data = {"notes": sync}
         json.dump(data, f)
+
 
 def read_local(local_file):
     local = {}
@@ -184,17 +168,39 @@ def read_local(local_file):
 
     return local
 
+
+def read_remote(keep, logger):
+    remote = {}
+    label = keep.findLabel('log')
+
+    note: gkeepapi.node.TopLevelNode
+    for note in keep.find(labels=[label]):
+        if not re.search('^\d+/\d+/\d+ ', note.title):
+            logger.warning(f"{note.title} - Skipping, title mismatch")
+            continue
+        remote[note.title] = {
+            "checksum": md5(note.text),
+            "note": note
+        }
+
+    return remote
+
+
 def read_token(token_file):
+    token = None
     if exists(token_file):
         with open(token_file) as f:
-            return f.read().strip()
-    return None
+            token = f.read().strip()
+    return token
+
 
 def read_state(state_file):
+    state = None
     if exists(state_file):
         with open(state_file) as f:
-            return json.load(f)
-    return None
+            state = json.load(f)
+    return state
+
 
 def read_sync(sync_file):
     sync = {}
@@ -208,8 +214,37 @@ def read_sync(sync_file):
                 sync[title] = notes[title]
     return sync
 
+
 def md5(s):
     return hashlib.md5(s.encode("utf-8")).hexdigest()
+
+
+def backup_local(backup_dir, file):
+    os.makedirs(backup_dir, exist_ok=True)
+    backup_file = join(backup_dir, datetime.now().strftime("%y%m%d%H%M%S"))
+    shutil.copyfile(file, backup_file)
+
+
+def setup_logger():
+    logger = logging.getLogger('keeplog')
+    logger.setLevel(logging.INFO)
+    ch = logging.StreamHandler(sys.stdout)
+    formatter = logging.Formatter('%(asctime)s [%(levelname)s] %(message)s')
+    ch.setFormatter(formatter)
+    logger.addHandler(ch)
+    return logger
+
+def load_config():
+    return Config().load(expanduser("~/.keeplog/config"))
+
+class Keeplog:
+    def __init__(self, logger, config):
+        self.logger = logger
+        self.config = config
+        self.keep = gkeepapi.Keep()
+
+    def sync(self):
+        pass
 
 class Config:
     def __init__(self):
@@ -251,11 +286,10 @@ class Config:
             raise Exception("Invalid config file, need at least 'user=', 'pass=' and 'file='.")
 
         if not self.on_conflict in ["prefer-local", "prefer-remote", "do-nothing"]:
-            raise Exception("Invalid config file, on-conflict needs to be 'prefer-local', 'prefer-remote' or 'do-nothing'.")
+            raise Exception(
+                "Invalid config file, on-conflict needs to be 'prefer-local', 'prefer-remote' or 'do-nothing'.")
 
-class Keeplog:
-    def __init__(self):
-        pass
+        return self
 
 
 if __name__ == '__main__':
