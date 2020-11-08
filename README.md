@@ -8,15 +8,15 @@ I mainly wrote it to learn Python and to support my workflow: I keep a local fil
 per day, like this:
 
 ```
+11/5/20 Friday
+--
+Todo
+- More stuff
+
 11/8/20 Sunday
 --
 Done
 - Stuff
-
-11/9/20 Monday
---
-Todo
-- More stuff
 ``` 
 
 I love the simplicity of a single text file and I absolutely hate the Google Keep UI in the browser. My notes are very
@@ -26,9 +26,22 @@ the computer.
 
 Installation
 --
-1. Create a config file `~/.keeplog/config` from [this template](config).
-2. Install dependencies via `pip3 install -r requirements.txt`
-3. Run `./keeplog.py`
+1. Create a [Google App Password](https://myaccount.google.com/apppasswords) for keeplog
+2. Create a config file `~/.keeplog/config` from [this template](config). Be sure to edit at least 
+   `user=`, `pass=` and `file=`.
+3. Install dependencies via `pip3 install -r requirements.txt`.
+4. Run `./keeplog.py`, you'll see something like this:
+
+```
+2020-11-08 13:33:50,038 [INFO] Logging in with token
+2020-11-08 13:33:59,221 [INFO] Successfully logged in
+2020-11-08 13:33:59,221 [INFO] Comparing remote and local
+2020-11-08 13:33:59,221 [INFO] Reading local notes
+2020-11-08 13:33:59,230 [INFO] Reading remote notes
+2020-11-08 13:33:59,234 [INFO] - Updating locally: 11/5/20 Friday
+2020-11-08 13:33:59,234 [INFO] - Updating remotely: 11/8/20 Sunday
+2020-11-08 13:33:59,616 [INFO] Writing local notes
+```
 
 Copyright
 --
