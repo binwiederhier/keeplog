@@ -75,8 +75,8 @@ class Keeplog:
 
         local = self._read_local()
         local_updated = False
-        remote = self._read_remote()
-        remote_label = self.keep.getLabel(self.config.label)
+        remote_label = self.keep.findLabel(self.config.label, create=True)
+        remote = self._read_remote(remote_label)
         checksums = self.state.checksums
 
         # Iterate through local entries and compare with remote ones
@@ -162,12 +162,11 @@ class Keeplog:
 
         return local
 
-    def _read_remote(self):
+    def _read_remote(self, remote_label):
         remote = {}
-        label = self.keep.findLabel(self.config.label)
 
         note: gkeepapi.node.TopLevelNode
-        for note in self.keep.find(labels=[label]):
+        for note in self.keep.find(labels=[remote_label]):
             if re.search('^\\d+/\\d+/\\d+ ', note.title):
                 remote[note.title] = RemoteNote(note)
 
