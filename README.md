@@ -82,8 +82,9 @@ $ ./keeplog.py watch
 
 
 
-Copyright
+Copyright & recognition
 --
-Philipp C. Heckel, licensed under the Apache 2.0 License.
+Philipp C. Heckel, licensed under the [Apache 2.0 License](LICENSE).
 
-Thanks very much to [kiwiz](https://github.com/kiwiz) for his excellent [gkeepapi](https://github.com/kiwiz/gkeepapi). 
+Thanks very much to [kiwiz](https://github.com/kiwiz) for his excellent [gkeepapi](https://github.com/kiwiz/gkeepapi),
+and to [chrisjbillington](https://github.com/chrisjbillington) for his wonderfully easy [inotify_simple](https://github.com/chrisjbillington/inotify_simple). 
