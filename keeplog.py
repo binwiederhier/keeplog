@@ -11,8 +11,6 @@ import gkeepapi
 import argparse
 import time
 from inotify_simple import INotify, flags
-from watchdog.observers import Observer
-from watchdog.events import FileSystemEventHandler, LoggingEventHandler
 from datetime import datetime
 from os.path import expanduser, exists, join
 
@@ -191,7 +189,7 @@ class Keeplog:
                 f.write("--\n")
                 f.write(local[title].text() + "\n")
                 if not local[title].text().endswith("\n"):
-                    f.write("\n") # Ensure empty line between entries
+                    f.write("\n")  # Ensure empty line between entries
 
     def _write_state(self):
         self.state.internal = self.keep.dump()
@@ -263,6 +261,8 @@ class Config:
         self.on_conflict = "prefer-local"
         self.state_file = expanduser("~/.keeplog/state")
         self.backup_dir = expanduser("~/.keeplog/backups")
+        self.watch_interval = 60
+        self.watch_sync_delay = 3.0
 
     def load(self, file):
         if not exists(file):
@@ -286,6 +286,10 @@ class Config:
                         self.on_conflict = match.group(2)
                     elif match.group(1) == "backup-dir":
                         self.backup_dir = match.group(2)
+                    elif match.group(1) == "watch-interval":
+                        self.watch_interval = int(match.group(2))
+                    elif match.group(1) == "watch-sync-delay":
+                        self.watch_sync_delay = float(match.group(2))
 
         if not self.username or not self.password or not self.file:
             raise Exception("Invalid config file, need at least 'user=', 'pass=' and 'file='.")
@@ -322,19 +326,15 @@ def watch(args):
     config = load_config(args.config)
     keeplog = Keeplog(logger, config)
 
-    logger.info("Starting file watch for local log file")
-
-    interval = args.interval * 1000
-    delay = args.delay
-
     inotify = INotify()
     watch_flags = flags.MODIFY | flags.DELETE_SELF
     inotify.add_watch(config.file, watch_flags)
 
     while True:
         try:
+            logger.info("Watching local log file for changes")
             modified = False
-            for event in inotify.read(timeout=interval):
+            for event in inotify.read(timeout=config.watch_interval * 1000):
                 for flag in flags.from_mask(event.mask):
                     if flag == flags.MODIFY:
                         logger.info("File modified, triggering sync")
@@ -345,15 +345,16 @@ def watch(args):
                         inotify.add_watch(config.file, watch_flags)
             if not modified:
                 logger.info("Local file unmodified, triggering scheduled sync")
-            time.sleep(delay)
+            time.sleep(config.watch_sync_delay)
             keeplog.sync()
         except KeyboardInterrupt:
             logger.info("Interrupt received. Exiting.")
             break
         except:
             logger.warning("Unexpected error:", sys.exc_info()[0])
-            logger.warning("Sleeping 10 seconds before trying again. Events may be missed.")
-            time.sleep(10)
+            logger.warning(f"Sleeping {config.watch_interval} seconds before trying again. Events may be missed.")
+            time.sleep(config.watch_interval)
+
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(prog='keeplog',
@@ -366,10 +367,6 @@ if __name__ == '__main__':
     parser_sync.set_defaults(func=sync)
 
     parser_watch = subparsers.add_parser("watch", help="Watch local file for changes and sync when changed")
-    parser_watch.add_argument("-i", "--interval", type=int, default=60,
-                              help="Interval in seconds to sync if no local changes are detected")
-    parser_watch.add_argument("-d", "--delay", type=float, default=2,
-                              help="Delay in seconds before triggering a sync when local changes are detected")
     parser_watch.set_defaults(func=watch)
 
     args = parser.parse_args()

@@ -49,3 +49,13 @@
 # to a remote change, the current local file is copied to this directory.
 #
 # backup-dir=~/.keeplog/backups
+
+# Interval in seconds to sync if no local changes are detected.
+# This is an integer setting and is only used in in the `keeplog watch` command.
+#
+# watch-interval=60
+
+# Delay in seconds to wait after changes were detected before a sync is triggered.
+# This is a float setting and is only used in in the `keeplog watch` command.
+#
+# watch-sync-delay=3.0
