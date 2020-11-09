@@ -32,18 +32,55 @@ Installation
 2. Create a config file `~/.keeplog/config` from [this template](config). Be sure to edit at least 
    `user=`, `pass=` and `file=`.
 3. Install dependencies via `pip3 install -r requirements.txt`.
-4. Run `./keeplog.py sync` (manually, or on a cron). You'll see something like this:
+4. Optionally (but highly recommended), you may either regularly run `keeplog.py sync` as a cron, or `keeplog.py watch` 
+   as a long running process, such as a systemd user service:
+   
+```
+$ vi ~/.config/systemd/user/keeplog.service
+[Unit]
+Description=Keeplog watch daemon
+
+[Service]
+ExecStart=/home/pheckel/Code/keeplog/keeplog.py watch
+
+[Install]
+WantedBy=default.target
+
+$ systemctl enable --user keeplog
+$ systemctl start --user keeplog
+$ journalctl --user -f -u keeplog
+``` 
+
+Usage
+--
+keeplog has two commands:
+
+- `keeplog.py sync` synchronizes local file with Google Keep
+- `keeplog.py watch` monitors the local file for changes and syncs when changed
+
+Manually (or via cron):
 
 ```
+$ ./keeplog.py sync
 2020-11-08 13:33:50,038 [INFO] Logging in with token
 2020-11-08 13:33:59,221 [INFO] Successfully logged in
 2020-11-08 13:33:59,221 [INFO] Comparing remote and local
-2020-11-08 13:33:59,221 [INFO] Reading local notes
-2020-11-08 13:33:59,230 [INFO] Reading remote notes
 2020-11-08 13:33:59,234 [INFO] - Updating locally: 11/5/20 Friday
 2020-11-08 13:33:59,234 [INFO] - Updating remotely: 11/8/20 Sunday
 2020-11-08 13:33:59,616 [INFO] Writing local notes
 ```
+
+Using file system monitoring:
+
+```
+$ ./keeplog.py watch
+2020-11-08 21:55:23,901 [INFO] Watching local log file for changes
+2020-11-08 21:55:31,728 [INFO] File modified, triggering sync
+...
+``` 
+
+
+
 
 Copyright
 --

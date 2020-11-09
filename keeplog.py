@@ -144,7 +144,6 @@ class Keeplog:
             self.logger.info("Nothing to update locally")
 
     def _read_local(self):
-        self.logger.info("Reading local notes")
         local = {}
 
         # Parse file
@@ -164,8 +163,6 @@ class Keeplog:
         return local
 
     def _read_remote(self):
-        self.logger.info("Reading remote notes")
-
         remote = {}
         label = self.keep.findLabel(self.config.label)
 
