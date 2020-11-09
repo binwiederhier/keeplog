@@ -41,7 +41,7 @@ $ vi ~/.config/systemd/user/keeplog.service
 Description=Keeplog watch daemon
 
 [Service]
-ExecStart=/home/pheckel/Code/keeplog/keeplog.py watch
+ExecStart=/path/to/keeplog/keeplog.py watch
 
 [Install]
 WantedBy=default.target
