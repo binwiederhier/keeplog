@@ -9,6 +9,10 @@ import shutil
 import sys
 import gkeepapi
 import argparse
+import time
+from inotify_simple import INotify, flags
+from watchdog.observers import Observer
+from watchdog.events import FileSystemEventHandler, LoggingEventHandler
 from datetime import datetime
 from os.path import expanduser, exists, join
 
@@ -309,13 +313,47 @@ def load_config(file):
 def sync(args):
     logger = setup_logger()
     config = load_config(args.config)
-
     keeplog = Keeplog(logger, config)
     keeplog.sync()
 
 
 def watch(args):
-    print("watch")
+    logger = setup_logger()
+    config = load_config(args.config)
+    keeplog = Keeplog(logger, config)
+
+    logger.info("Starting file watch for local log file")
+
+    interval = args.interval * 1000
+    delay = args.delay
+
+    inotify = INotify()
+    watch_flags = flags.MODIFY | flags.DELETE_SELF
+    inotify.add_watch(config.file, watch_flags)
+
+    while True:
+        try:
+            modified = False
+            for event in inotify.read(timeout=interval):
+                for flag in flags.from_mask(event.mask):
+                    if flag == flags.MODIFY:
+                        logger.info("File modified, triggering sync")
+                        modified = True
+                    elif flag == flags.DELETE_SELF:
+                        logger.info("File deleted/replaced, triggering sync")
+                        modified = True
+                        inotify.add_watch(config.file, watch_flags)
+            if not modified:
+                logger.info("Local file unmodified, triggering scheduled sync")
+            time.sleep(delay)
+            keeplog.sync()
+        except KeyboardInterrupt:
+            logger.info("Interrupt received. Exiting.")
+            break
+        except:
+            logger.warning("Unexpected error:", sys.exc_info()[0])
+            logger.warning("Sleeping 10 seconds before trying again. Events may be missed.")
+            time.sleep(10)
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(prog='keeplog',
@@ -328,6 +366,10 @@ if __name__ == '__main__':
     parser_sync.set_defaults(func=sync)
 
     parser_watch = subparsers.add_parser("watch", help="Watch local file for changes and sync when changed")
+    parser_watch.add_argument("-i", "--interval", type=int, default=60,
+                              help="Interval in seconds to sync if no local changes are detected")
+    parser_watch.add_argument("-d", "--delay", type=float, default=2,
+                              help="Delay in seconds before triggering a sync when local changes are detected")
     parser_watch.set_defaults(func=watch)
 
     args = parser.parse_args()

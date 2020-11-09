@@ -1,1 +1,2 @@
 gkeepapi>=0.13.1
+inotify_simple>=1.3.5
