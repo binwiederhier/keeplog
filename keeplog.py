@@ -8,6 +8,7 @@ import re
 import shutil
 import sys
 import gkeepapi
+import argparse
 from datetime import datetime
 from os.path import expanduser, exists, join
 
@@ -301,13 +302,37 @@ def setup_logger():
     return logger
 
 
-def load_config():
-    return Config().load(expanduser("~/.keeplog/config"))
+def load_config(file):
+    return Config().load(expanduser(file))
 
 
-if __name__ == '__main__':
+def sync(args):
     logger = setup_logger()
-    config = load_config()
+    config = load_config(args.config)
 
     keeplog = Keeplog(logger, config)
     keeplog.sync()
+
+
+def watch(args):
+    print("watch")
+
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser(prog='keeplog',
+                                     description="Two-way sync tool between a local file and Google Keep")
+    subparsers = parser.add_subparsers()
+
+    parser.add_argument("-c", "--config", default="~/.keeplog/config", help="Alternate config file")
+
+    parser_sync = subparsers.add_parser("sync", help="Synchronize local file with Google Keep")
+    parser_sync.set_defaults(func=sync)
+
+    parser_watch = subparsers.add_parser("watch", help="Watch local file for changes and sync when changed")
+    parser_watch.set_defaults(func=watch)
+
+    args = parser.parse_args()
+    if "func" not in args:
+        parser.print_help()
+        sys.exit(0)
+
+    args.func(args)

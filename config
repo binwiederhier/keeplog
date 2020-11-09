@@ -40,11 +40,12 @@
 # are edited at the same time:
 #
 # - do-nothing (default): Just reports conflicts in the output
-# - prefer-local: Overwrites changed in Google Keep
-# - prefer-remote: Overwrites changed in the local log file
+# - prefer-local: Overwrites changes in Google Keep
+# - prefer-remote: Overwrites changes in the local log file
 #
 # on-conflict=do-nothing
 
 # Backup directory for local LOG files. Every time the local file is updated due
 # to a remote change, the current local file is copied to this directory.
+#
 # backup-dir=~/.keeplog/backups
