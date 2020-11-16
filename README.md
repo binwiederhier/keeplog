@@ -42,6 +42,8 @@ Description=Keeplog watch daemon
 
 [Service]
 ExecStart=/path/to/keeplog/keeplog.py watch
+Restart=always
+RestartSec=30
 
 [Install]
 WantedBy=default.target

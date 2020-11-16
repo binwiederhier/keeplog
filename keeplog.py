@@ -259,6 +259,7 @@ class Config:
         self.backup_dir = expanduser("~/.keeplog/backups")
         self.watch_interval = 60
         self.watch_sync_delay = 3.0
+        self.on_watch_error = "exit"
 
     def load(self, file):
         if not exists(file):
@@ -286,6 +287,8 @@ class Config:
                         self.watch_interval = int(match.group(2))
                     elif match.group(1) == "watch-sync-delay":
                         self.watch_sync_delay = float(match.group(2))
+                    elif match.group(1) == "on-watch-error":
+                        self.on_watch_error = match.group(2)
 
         if not self.username or not self.password or not self.file:
             raise Exception("Invalid config file, need at least 'user=', 'pass=' and 'file='.")
@@ -293,6 +296,9 @@ class Config:
         if self.on_conflict not in ["prefer-local", "prefer-remote", "do-nothing"]:
             raise Exception(
                 "Invalid config file, on-conflict needs to be 'prefer-local', 'prefer-remote' or 'do-nothing'.")
+
+        if self.on_watch_error not in ["exit", "retry"]:
+            raise Exception("Invalid config file, on-watch-error needs to be 'exit' or 'retry'.")
 
         return self
 
@@ -348,8 +354,12 @@ def watch(args):
             break
         except:
             logger.warning("Unexpected error:", sys.exc_info()[0])
-            logger.warning(f"Sleeping {config.watch_interval} seconds before trying again. Events may be missed.")
-            time.sleep(config.watch_interval)
+            if config.on_watch_error == "exit":
+                logger.warning("Exiting as per watch error strategy 'exit'.")
+                exit(1)
+            else:
+                logger.warning(f"Sleeping {config.watch_interval} seconds before trying again. Events may be missed.")
+                time.sleep(config.watch_interval)
 
 
 if __name__ == '__main__':

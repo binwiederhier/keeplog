@@ -59,3 +59,13 @@
 # This is a float setting and is only used in in the `keeplog watch` command.
 #
 # watch-sync-delay=3.0
+
+# Error strategy for watch errors: Decides what happens if there is any error
+# when watching the daily log file (e.g. Internet connectivity issues, or inotify errors):
+#
+# - exit (default): Exits the script with error code 1. This can be used if systemd (or other
+#                   mechanisms) restart the script automatically.
+# - retry: Re-establishes the watch in an infinite retry mechanism. This was somewhat unstable
+#          when the Internet fails and comes back and leads to infinite failures.
+#
+# on-watch-error=exit
