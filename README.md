@@ -4,8 +4,6 @@ keeplog
 When run, keeplog parses the local file and synchronizes each entry to individual Keep notes. Updates within Keep are 
 populated to the local file as well.
 
-_keeplog is work-in-progress, so use with caution!_
-
 I mainly wrote it to learn Python and to support my workflow: I keep a local file in `~/LOG` with one entry 
 per day, like this:
 
