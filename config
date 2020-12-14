@@ -46,7 +46,8 @@
 # on-conflict=do-nothing
 
 # Backup directory for local LOG files. Every time the local file is updated due
-# to a remote change, the current local file is copied to this directory.
+# to a remote change, the current local file is copied to this directory. Every time
+# the remote notes are changed, a backup of the local changes are made.
 #
 # backup-dir=~/.keeplog/backups
 

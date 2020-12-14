@@ -77,6 +77,8 @@ class Keeplog:
         local_updated = False
         remote_label = self.keep.findLabel(self.config.label, create=True)
         remote = self._read_remote(remote_label)
+        remote_serialized = self._serialize(remote)
+        remote_updated = False
         checksums = self.state.checksums
 
         # Iterate through local entries and compare with remote ones
@@ -87,6 +89,7 @@ class Keeplog:
                 note.labels.add(remote_label)
                 remote[id] = RemoteNote(note)
                 checksums[id] = local[id].checksum()
+                remote_updated = True
             elif remote[id].text() != local[id].text():
                 if id in checksums:
                     local_changed = local[id].checksum() != checksums[id]
@@ -95,6 +98,7 @@ class Keeplog:
                         self.logger.info(f"- Updating remotely: {id}")
                         remote[id].text(local[id].text())
                         checksums[id] = local[id].checksum()
+                        remote_updated = True
                     elif not local_changed and remote_changed:
                         self.logger.info(f"- Updating locally: {id}")
                         local[id].text(remote[id].text())
@@ -109,6 +113,7 @@ class Keeplog:
                         self.logger.info(f"- Updating remotely (conflict override): {id}")
                         remote[id].text(local[id].text())
                         checksums[id] = local[id].checksum()
+                        remote_updated = True
                     else:
                         self.logger.info(f"- Conflict, doing nothing: {id}")
                 elif self.config.on_conflict == "prefer-remote":
@@ -120,6 +125,7 @@ class Keeplog:
                     self.logger.info(f"- Updating remotely (conflict override): {id}")
                     remote[id].text(local[id].text())
                     checksums[id] = local[id].checksum()
+                    remote_updated = True
                 else:
                     self.logger.info(f"- Conflict, doing nothing: {id}")
             else:
@@ -133,8 +139,12 @@ class Keeplog:
                 checksums[id] = remote[id].checksum()
                 local_updated = True
 
-        # Always sync remote (if there are no changes, this will do nothing)
-        self.keep.sync()
+        # Sync remote changes if there are changes
+        if remote_updated:
+            self._backup_remote(remote_serialized)
+            self.keep.sync()
+        else:
+            self.logger.info("Nothing to update remotely")
 
         # Sync local file only if there are changes
         if local_updated:
@@ -174,18 +184,29 @@ class Keeplog:
 
     def _backup_local(self):
         os.makedirs(self.config.backup_dir, exist_ok=True)
-        backup_file = join(self.config.backup_dir, datetime.now().strftime("%y%m%d%H%M%S"))
+        backup_file = join(self.config.backup_dir, datetime.now().strftime("%y%m%d%H%M%S") + ".local")
         shutil.copyfile(self.config.file, backup_file)
+
+    def _backup_remote(self, remote_serialized):
+        os.makedirs(self.config.backup_dir, exist_ok=True)
+        backup_file = join(self.config.backup_dir, datetime.now().strftime("%y%m%d%H%M%S") + ".remote")
+        with open(backup_file, mode="w", encoding="utf-8") as f:
+            f.write(remote_serialized)
 
     def _write_local(self, local):
         self.logger.info("Writing local notes")
         with open(self.config.file, mode="w", encoding="utf-8") as f:
-            for title in local.keys():
-                f.write(title + "\n")
-                f.write("--\n")
-                f.write(local[title].text() + "\n")
-                if not local[title].text().endswith("\n"):
-                    f.write("\n")  # Ensure empty line between entries
+            f.write(self._serialize(local))
+
+    def _serialize(self, notes):
+        result = ""
+        for title in notes.keys():
+            result += title + "\n"
+            result += "--\n"
+            result += notes[title].text() + "\n"
+            if not notes[title].text().endswith("\n"):
+                result += "\n"  # Ensure empty line between entries
+        return result
 
     def _write_state(self):
         self.state.internal = self.keep.dump()
